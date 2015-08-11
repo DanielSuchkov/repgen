@@ -104,8 +104,8 @@ std::unique_ptr<Generator<ValSource>> make_generator(
 int main() {
     try {
         ValStorage stg;
-        auto gnr = make_generator(std::string("/home/fallen/ttemplate"), stg);
-        gnr->generate_file("/home/fallen/treport");
+        auto gnr = make_generator(std::string("./test_template"), stg);
+        gnr->generate_file("./test_report");
     }
     catch (const std::exception &err) {
         std::cout << err.what() << std::endl;
