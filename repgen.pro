@@ -22,3 +22,6 @@ unix {
     LIBS += $${LIBPATH}libboost_filesystem.a \
         $${LIBPATH}libboost_system.a
 }
+
+HEADERS += \
+    Generator.h
