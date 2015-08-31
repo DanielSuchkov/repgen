@@ -1,5 +1,7 @@
-some pretty stuff <<<a>>>, then <<<c>>>
-but <<<b>>>
+some pretty stuff <<<Unit(Ix)>>>, then <<<Name(Trillian Astra)>>>
+but <<<Name(Slartibartfast)>>>/<<<Description(Slartibartfast)>>>
 
 <<< ha-ha
->>>joke<<<. not <<<a>>> joke. <<<justkidding>>>
+>>>joke<<<. not <<<Value(Marvin)>>> joke. <<<justkidding>>>. not <<<Value(Marvin-Wrong)>>> joke.
+
+wrong field: <<<Val(Ix)>>>
