@@ -3,7 +3,6 @@
 #include <fstream>
 #include <string>
 #include <exception>
-#include <cstring>
 #include <memory>
 #include <unordered_map>
 #include <functional>
@@ -12,8 +11,11 @@
 class WrongFormat : public std::exception {
 public:
     WrongFormat(const std::string &msg)
-        : msg("Wrong format" + std::string(msg.empty() ? "" : ": ") + msg) {}
+        : msg("wrong format" + std::string(msg.empty() ? "" : ": ") + msg) {}
 
+    const char *what() const noexcept /*gcc need this specifier*/ {
+        return msg.c_str();
+    }
 private:
     std::string msg;
 };
@@ -34,7 +36,7 @@ public:
             throw std::ios_base::failure("cannot open file [" + template_path + "]");
         }
 
-        access_field = {
+        access_field = { /// \todo maybe move it to ValSource to get more flexibility?
             { "Name", &ValSource::get_name },
             { "Value", &ValSource::get_value },
             { "Description", &ValSource::get_description },
@@ -48,32 +50,25 @@ public:
             throw std::ios_base::failure("cannot create file [" + output_path + "]");
         }
         std::string line_buf; // to avoid reallocations
-        std::string name_buf; // same purpose
+        std::string pattern_buf; // same purpose
 
         std::getline(templ_file, line_buf);
         while (templ_file.good()) {
-            size_t s_pos = 0;
-            while ((s_pos = line_buf.find(open_delim, s_pos)) != std::string::npos) { // find start
-                auto e_pos = line_buf.find(close_delim, s_pos); // find end
-                if (e_pos == std::string::npos) {
-                    break;
-                }
-
-                /// \todo Rewrite it using std::string::substr
-                name_buf.assign(line_buf.begin() + s_pos + strlen(open_delim), line_buf.begin() + e_pos); // get pattern name
-                auto pattern_length = name_buf.size() + strlen(open_delim) + strlen(close_delim);
+            size_t search_pos = 0;
+            while ((search_pos = find_pattern(pattern_buf, line_buf, search_pos)) != std::string::npos) {
                 try { // replace pattern with value
-                    auto val = get_field_value(name_buf);
-                    line_buf.replace(s_pos, pattern_length, val);
-                    s_pos += val.length();
+                    auto val = get_field_value(pattern_buf);
+                    auto placeholder_len = open_delim.size() + pattern_buf.size() + close_delim.size();
+                    line_buf.replace(search_pos, placeholder_len, val);
+                    search_pos += val.size();
                 }
                 catch (const std::out_of_range &err) {
-                    std::cout << err.what() << "; cannot get value: " << name_buf << std::endl;
-                    s_pos += strlen(open_delim);
+                    std::cout << err.what() << "; cannot get value: [" << pattern_buf << "]\n";
+                    search_pos++;
                 }
                 catch (const WrongFormat &err) {
-                    std::cout << err.what() << " [" << name_buf << "]" << std::endl;
-                    s_pos += strlen(open_delim);
+                    std::cout << err.what() << "; arg: [" << pattern_buf << "]\n";
+                    search_pos++;
                 }
             }
             of.write(line_buf.c_str(), line_buf.size());
@@ -86,32 +81,49 @@ public:
 private:
     std::ifstream templ_file;
     const ValSource &src;
-    const char *open_delim;
-    const char *close_delim;
+    const std::string open_delim;
+    const std::string close_delim;
     std::unordered_map<
         std::string, std::function<std::string (const ValSource *, const std::string &)>
     > access_field;
 
 private:
     /// \param record_field must be like this: FieldName(RecordName)
-    std::string get_field_value(const std::string &placeholder) const {
+    std::string get_field_value(const std::string &pattern) const {
         std::string record, field;
-        std::tie(record, field) = parse_placeholder(placeholder);
+        std::tie(record, field) = parse_pattern(pattern);
         auto it = access_field.find(field);
         if (it == access_field.end()) {
-            throw std::out_of_range("no such field: " + field);
+            throw std::out_of_range("no such field: [" + field + "]");
         }
-        std::cout << record << ": " << field << std::endl;
         return it->second(&src, record);
     }
 
-    static auto parse_placeholder(const std::string &placeholder)
+    static auto parse_pattern(const std::string &pattern)
         -> std::tuple<std::string, std::string> {
-        auto rs = placeholder.find('(');
-        if (rs == std::string::npos) { throw WrongFormat("cannot find opening '('"); }
-        auto re = placeholder.find(')', rs);
-        if (re == std::string::npos) { throw WrongFormat("cannot find closing ')'"); }
-        return std::make_tuple(placeholder.substr(rs + 1, re - rs - 1), placeholder.substr(0, rs));
+        auto rs = pattern.find('(');
+        if (rs == std::string::npos) {
+            throw WrongFormat("cannot find opening '('");
+        }
+
+        auto re = pattern.find(')', rs);
+        if (re == std::string::npos) {
+            throw WrongFormat("cannot find closing ')'");
+        }
+
+        return std::make_tuple(pattern.substr(rs + 1, re - rs - 1), pattern.substr(0, rs));
+    }
+
+    size_t find_pattern(std::string &pattern_buf, const std::string &line_buf, size_t s_pos) const {
+        s_pos = line_buf.find(open_delim, s_pos);
+        if (s_pos == std::string::npos) { return std::string::npos; }
+        auto e_pos = line_buf.find(close_delim, s_pos);
+        if (e_pos == std::string::npos) { return std::string::npos; }
+        pattern_buf.assign(
+                    line_buf.substr(s_pos + open_delim.size(),
+                                    e_pos - s_pos - open_delim.size())
+                    ); // get pattern name
+        return s_pos;
     }
 };
 
