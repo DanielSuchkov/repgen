@@ -1,7 +1,7 @@
 #include <iostream>
 #include <unordered_map>
 
-#include "Generator.h"
+#include "Generator.hpp"
 
 struct Record {
     std::string name;

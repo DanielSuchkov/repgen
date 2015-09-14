@@ -17,4 +17,4 @@ TEMPLATE = app
 SOURCES += main.cpp
 
 HEADERS += \
-    Generator.h
+    Generator.hpp
