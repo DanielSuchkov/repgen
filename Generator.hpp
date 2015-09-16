@@ -1,5 +1,4 @@
-#ifndef GENERATOR_H
-#define GENERATOR_H
+#pragma once
 #include <fstream>
 #include <string>
 #include <exception>
@@ -7,6 +6,7 @@
 #include <unordered_map>
 #include <functional>
 #include <tuple>
+#include <boost/filesystem.hpp>
 
 class WrongFormat : public std::exception {
 public:
@@ -20,34 +20,33 @@ private:
     std::string msg;
 };
 
-template<class ValSource>
 class Generator {
 public:
-    Generator(
-            const std::string &template_path,
-            const ValSource &src,
-            const char *open_delim,
-            const char *close_delim)
-        : templ_file(template_path)
-        , src(src)
-        , open_delim(open_delim)
-        , close_delim(close_delim) {
-        if (!templ_file) {
-            throw std::ios_base::failure("cannot open file [" + template_path + "]");
-        }
+    using field_accessors_t = std::unordered_map<
+        std::string /*field name*/,
+        std::function<std::string/*field representation*/ (const std::string /*object name*/ &)>
+    >;
 
-        access_field = { /// \todo maybe move it to ValSource to get more flexibility?
-            { "Name", &ValSource::get_name },
-            { "Value", &ValSource::get_value },
-            { "Description", &ValSource::get_description },
-            { "Unit", &ValSource::get_unit }
-        };
+public:
+    Generator(
+            const boost::filesystem::path &template_path,
+            const field_accessors_t &accessors,
+            const char *open_delim = "<<<",
+            const char *close_delim = ">>>")
+        : templ_file(std::make_unique<std::ifstream>(template_path.string()))
+        , open_delim(open_delim)
+        , close_delim(close_delim)
+        , access_field(accessors) {
+        if (!templ_file->is_open()) {
+            throw std::ios_base::failure("cannot open file [" + template_path.string() + "]");
+        }
     }
 
-    void generate_file(const std::string &output_path) {
-        std::ofstream of(output_path);
+    void generate_file(const boost::filesystem::path &output_path) {
+        auto &templ_file = *this->templ_file;
+        std::ofstream of(output_path.string());
         if (!of) {
-            throw std::ios_base::failure("cannot create file [" + output_path + "]");
+            throw std::ios_base::failure("cannot create file [" + output_path.string() + "]");
         }
         std::string line_buf; // to avoid reallocations
         std::string pattern_buf; // same purpose
@@ -79,13 +78,10 @@ public:
     }
 
 private:
-    std::ifstream templ_file;
-    const ValSource &src;
+    std::unique_ptr<std::ifstream> templ_file;
     const std::string open_delim;
     const std::string close_delim;
-    std::unordered_map<
-        std::string, std::function<std::string (const ValSource *, const std::string &)>
-    > access_field;
+    const field_accessors_t access_field;
 
 private:
     /// \param record_field must be like this: FieldName(RecordName)
@@ -96,7 +92,7 @@ private:
         if (it == access_field.end()) {
             throw std::out_of_range("no such field: [" + field + "]");
         }
-        return it->second(&src, record);
+        return it->second(record);
     }
 
     static auto parse_pattern(const std::string &pattern)
@@ -126,17 +122,3 @@ private:
         return s_pos;
     }
 };
-
-/*!
- * To deduce type of ValSource automatically
- */
-template< class ValSource >
-std::unique_ptr<Generator<ValSource>> make_generator(
-        const std::string &template_path,
-        const ValSource &src,
-        const char *open_delim = "<<<",
-        const char *close_delim = ">>>") {
-    return std::make_unique<Generator<ValSource>>(template_path, src, open_delim, close_delim);
-}
-
-#endif // GENERATOR_H

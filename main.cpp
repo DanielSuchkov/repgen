@@ -1,5 +1,6 @@
 #include <iostream>
 #include <unordered_map>
+#include <functional>
 
 #include "Generator.hpp"
 
@@ -47,6 +48,19 @@ public:
         return std::to_string(get_record(name).unit);
     }
 
+    Generator::field_accessors_t get_fields_accessors() const {
+        auto bindThis = [this] (auto fn_ptr) {
+            return std::bind(fn_ptr, this, std::placeholders::_1);
+        };
+
+        return {
+            { "Name", bindThis(&ValStorage::get_name) },
+            { "Value", bindThis(&ValStorage::get_value) },
+            { "Description", bindThis(&ValStorage::get_description) },
+            { "Unit", bindThis(&ValStorage::get_unit) }
+        };
+    }
+
 private:
     std::unordered_map<std::string, Record> vals;
 
@@ -59,8 +73,8 @@ private:
 int main() {
     try {
         ValStorage stg;
-        auto gnr = make_generator(std::string("./test_template"), stg);
-        gnr->generate_file("./test_report");
+        Generator gnr("./test_template", stg.get_fields_accessors());
+        gnr.generate_file("./test_report");
     }
     catch (const std::exception &err) {
         std::cout << err.what() << std::endl;
